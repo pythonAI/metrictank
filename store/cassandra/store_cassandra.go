@@ -197,11 +197,15 @@ func NewCassandraStore(addrs, keyspace, consistency, CaPath, Username, Password,
 	}
 	cluster.Consistency = gocql.ParseConsistency(consistency)
 	cluster.Timeout = time.Duration(timeout) * time.Millisecond
+	cluster.ConnectTimeout = cluster.Timeout
 	cluster.NumConns = writers
 	cluster.ProtoVersion = protoVer
+	cluster.DisableInitialHostLookup = true
 	var err error
 	tmpSession, err := cluster.CreateSession()
 	if err != nil {
+		log.Info("cassandra_store: session timeout: %s", cluster.Timeout.String())
+		log.Fatal(4, err.Error())
 		return nil, err
 	}
 
@@ -209,11 +213,13 @@ func NewCassandraStore(addrs, keyspace, consistency, CaPath, Username, Password,
 
 	// create or verify the metrictank keyspace
 	if createKeyspace {
+		log.Info("cassandra_store: ensuring that keyspace %s exists.", keyspace)
 		err = tmpSession.Query(fmt.Sprintf(keyspace_schema, keyspace)).Exec()
 		if err != nil {
 			return nil, err
 		}
 		for _, result := range ttlTables {
+			log.Info("cassandra_store: ensuring that table %s exists.", result.Table)
 			err := tmpSession.Query(fmt.Sprintf(table_schema, keyspace, result.Table, result.WindowSize, result.WindowSize*60*60)).Exec()
 			if err != nil {
 				return nil, err
